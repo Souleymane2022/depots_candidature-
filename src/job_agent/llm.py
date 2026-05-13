@@ -19,8 +19,11 @@ from .logging_setup import get_logger
 from .models import (
     CoverLetterResult,
     EmailClassification,
+    FundingInfo,
     JobOffer,
     LetterLanguageMode,
+    Opportunity,
+    OpportunityTypeDetection,
     Profile,
     ScoreResult,
 )
@@ -226,6 +229,102 @@ def classify_email(subject: str, body: str) -> EmailClassification:
         max_tokens=200,
     )
     return EmailClassification.model_validate(raw)
+
+
+_DETECT_TYPE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "opportunity_type": {
+            "type": "string",
+            "enum": ["job", "contest", "event", "cfp"],
+        },
+        "deadline_iso": {"type": ["string", "null"]},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+    },
+    "required": ["opportunity_type", "confidence"],
+}
+
+_FUNDING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_free_to_enter": {"type": "boolean"},
+        "is_funded": {"type": "boolean"},
+        "funding_amount_eur": {"type": ["integer", "null"], "minimum": 0},
+        "funding_type": {
+            "type": "string",
+            "enum": ["prize", "grant", "scholarship", "salary", "none"],
+        },
+        "notes": {"type": "string"},
+    },
+    "required": ["is_free_to_enter", "is_funded", "funding_type"],
+}
+
+
+@retry_exponential()
+def detect_opportunity_type(
+    title: str, organization: str, description: str
+) -> OpportunityTypeDetection:
+    """Classifie une page en job/contest/event/cfp + extrait deadline si présente."""
+    prompt = prompts.render(
+        "detect_opportunity_type",
+        title=title[:300],
+        organization=organization[:200],
+        description=description[:6000],
+    )
+    raw = _call_with_tool(
+        model=MODEL_HAIKU,
+        user_prompt=prompt,
+        tool_name="detect_opportunity_type",
+        tool_description="Classifie une opportunité en job/contest/event/cfp et extrait sa deadline.",
+        tool_schema=_DETECT_TYPE_SCHEMA,
+        max_tokens=300,
+    )
+    return OpportunityTypeDetection.model_validate(raw)
+
+
+@retry_exponential()
+def extract_funding(title: str, description: str) -> FundingInfo:
+    """Extrait les conditions financières d'une opportunité."""
+    prompt = prompts.render(
+        "extract_funding",
+        title=title[:300],
+        description=description[:6000],
+    )
+    raw = _call_with_tool(
+        model=MODEL_HAIKU,
+        user_prompt=prompt,
+        tool_name="extract_funding",
+        tool_description="Extrait gratuité, financement, montant et type de financement.",
+        tool_schema=_FUNDING_SCHEMA,
+        max_tokens=400,
+    )
+    return FundingInfo.model_validate(raw)
+
+
+@retry_exponential()
+def score_opportunity(
+    profile: Profile, opportunity: Opportunity, cv_text: str = ""
+) -> ScoreResult:
+    """Score une opportunité non-job (concours, event, cfp) sur 0-100."""
+    prompt = prompts.render(
+        "score_opportunity",
+        profile_json=profile.model_dump_json(),
+        cv_text=cv_text[:8000],
+        opportunity_type=opportunity.opportunity_type.value,
+        title=opportunity.title,
+        organization=opportunity.organization,
+        url=opportunity.url,
+        deadline=opportunity.deadline.isoformat() if opportunity.deadline else "non précisée",
+        description=opportunity.description[:8000],
+    )
+    raw = _call_with_tool(
+        model=MODEL_OPUS,
+        user_prompt=prompt,
+        tool_name="score_offer",
+        tool_description="Renvoie un score d'adéquation entre 0 et 100 + raison + langue détectée.",
+        tool_schema=_SCORE_SCHEMA,
+    )
+    return ScoreResult.model_validate(raw)
 
 
 @retry_exponential()

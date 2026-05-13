@@ -210,3 +210,122 @@ class LetterLanguageMode(StrEnum):
     AUTO = "auto"
     FR = "fr"
     EN = "en"
+
+
+# ---------------------------------------------------------------------------
+# Add-on : recherche d'opportunités + auth
+# ---------------------------------------------------------------------------
+
+
+class OpportunityType(StrEnum):
+    """Type d'opportunité que l'agent peut traiter."""
+
+    JOB = "job"
+    CONTEST = "contest"
+    EVENT = "event"
+    CFP = "cfp"
+
+
+class FundingType(StrEnum):
+    PRIZE = "prize"
+    GRANT = "grant"
+    SCHOLARSHIP = "scholarship"
+    SALARY = "salary"
+    NONE = "none"
+
+
+class FundingInfo(BaseModel):
+    """Extraction des conditions financières d'une opportunité."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_free_to_enter: bool
+    is_funded: bool
+    funding_amount_eur: int | None = None
+    funding_type: FundingType = FundingType.NONE
+    notes: str = ""
+
+
+class OpportunityTypeDetection(BaseModel):
+    """Sortie de llm.detect_opportunity_type."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    opportunity_type: OpportunityType
+    deadline_iso: str | None = None
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class Opportunity(BaseModel):
+    """Opportunité découverte par une source (job, contest, event, cfp)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    title: str
+    organization: str
+    description: str
+    opportunity_type: OpportunityType = OpportunityType.JOB
+    deadline: datetime | None = None
+    source: str
+    language: str | None = None
+    raw_metadata: dict = Field(default_factory=dict)
+
+
+class WatchSourceMethod(StrEnum):
+    RSS = "rss"
+    HTML_SCRAPE = "html_scrape"
+    BROWSER_USE = "browser_use"
+    API_ADZUNA = "api_adzuna"
+    API_FRANCE_TRAVAIL = "api_france_travail"
+
+
+class WatchSource(BaseModel):
+    """Source à veiller pour découvrir des opportunités."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    url: str
+    method: WatchSourceMethod
+    opportunity_type: OpportunityType = OpportunityType.JOB
+    refresh_hours: int = Field(24, gt=0)
+    free_funded_only: bool = False
+    enabled: bool = True
+    last_run_at: datetime | None = None
+    notes: str = ""
+
+
+class SearchQuery(BaseModel):
+    """Paramètres d'une recherche multi-source."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    keywords: list[str] = Field(default_factory=list)
+    location: str | None = None
+    opportunity_types: list[OpportunityType] = Field(default_factory=list)
+    max_results_per_source: int = 50
+    posted_within_days: int = 14
+    free_only: bool = False
+    min_funding_eur: int = 0
+
+
+class AuthMethod(StrEnum):
+    """Stratégie d'authentification pour un site."""
+
+    SHARED_CHROME = "shared_chrome"
+    STORED = "stored"
+    OAUTH = "oauth"
+    NONE = "none"
+
+
+class SiteCredential(BaseModel):
+    """Credentials stockés (chiffrés) pour un domaine."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    site_domain: str
+    auth_method: AuthMethod
+    username: str | None = None
+    password: str | None = None
+    notes: str = ""

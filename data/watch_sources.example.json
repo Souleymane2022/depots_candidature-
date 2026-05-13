@@ -1,0 +1,64 @@
+{
+  "sources": [
+    {
+      "name": "Devpost",
+      "url": "https://devpost.com/hackathons",
+      "method": "browser_use",
+      "opportunity_type": "contest",
+      "refresh_hours": 24,
+      "free_funded_only": true,
+      "enabled": false,
+      "notes": "Hackathons (souvent gratuits + dotations)."
+    },
+    {
+      "name": "F6S",
+      "url": "https://www.f6s.com/programs",
+      "method": "browser_use",
+      "opportunity_type": "contest",
+      "refresh_hours": 24,
+      "free_funded_only": false,
+      "enabled": false,
+      "notes": "Accélérateurs, programmes startup, parfois prix."
+    },
+    {
+      "name": "Bpifrance",
+      "url": "https://www.bpifrance.fr/nos-appels-a-projets-concours",
+      "method": "html_scrape",
+      "opportunity_type": "cfp",
+      "refresh_hours": 48,
+      "free_funded_only": true,
+      "enabled": false,
+      "notes": "Appels à projets financés Bpifrance (subventions FR)."
+    },
+    {
+      "name": "Horizon Europe",
+      "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-search",
+      "method": "browser_use",
+      "opportunity_type": "cfp",
+      "refresh_hours": 72,
+      "free_funded_only": true,
+      "enabled": false,
+      "notes": "Programme-cadre R&I de l'UE."
+    },
+    {
+      "name": "Hello Tomorrow Global Challenge",
+      "url": "https://hello-tomorrow.org/global-challenge/",
+      "method": "html_scrape",
+      "opportunity_type": "contest",
+      "refresh_hours": 168,
+      "free_funded_only": true,
+      "enabled": false,
+      "notes": "Deeptech contest annuel."
+    },
+    {
+      "name": "Welcome to the Jungle",
+      "url": "https://www.welcometothejungle.com/fr/jobs?query=python",
+      "method": "browser_use",
+      "opportunity_type": "job",
+      "refresh_hours": 12,
+      "free_funded_only": false,
+      "enabled": false,
+      "notes": "JS lourd — vérifie leurs CGU avant activation."
+    }
+  ]
+}

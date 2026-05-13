@@ -1,0 +1,29 @@
+Tu évalues la pertinence d'une opportunité (concours, conférence, appel à projets, prix) pour un candidat.
+
+Profil du candidat (JSON) :
+{{profile_json}}
+
+Texte du CV (extrait) :
+{{cv_text}}
+
+Opportunité :
+Type : {{opportunity_type}}
+Titre : {{title}}
+Organisation : {{organization}}
+URL : {{url}}
+Deadline : {{deadline}}
+Description :
+{{description}}
+
+Consigne :
+1. Détecte la langue principale.
+2. Attribue un score 0-100 selon :
+   - 35 points : éligibilité (le candidat remplit les critères explicites : âge, domaine, statut, localisation).
+   - 25 points : alignement thématique (compétences, target_roles, secteurs d'intérêt).
+   - 20 points : qualité de l'opportunité (réputation, dotation, exposition).
+   - 20 points : feasabilité (deadline atteignable, charge de travail raisonnable).
+3. Justifie en 2-3 phrases factuelles.
+
+Pénalise fortement si l'opportunité est dans une industrie exclue ou si le candidat ne remplit manifestement pas les critères d'éligibilité.
+
+Réponds UNIQUEMENT via l'outil `score_offer` (même schéma que pour les jobs).

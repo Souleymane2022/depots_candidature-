@@ -68,7 +68,44 @@ CREATE TABLE IF NOT EXISTS inbox_events (
 CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_applications_company ON applications(company);
 CREATE INDEX IF NOT EXISTS idx_inbox_events_app ON inbox_events(application_id);
+
+CREATE TABLE IF NOT EXISTS site_credentials (
+    site_domain TEXT PRIMARY KEY,
+    auth_method TEXT NOT NULL,
+    username TEXT,
+    password_encrypted BLOB,
+    notes TEXT,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS auth_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_domain TEXT,
+    event_type TEXT,
+    success INTEGER,
+    occurred_at TIMESTAMP,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS watch_sources (
+    name TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    method TEXT NOT NULL,
+    opportunity_type TEXT DEFAULT 'job',
+    refresh_hours INTEGER DEFAULT 24,
+    free_funded_only INTEGER DEFAULT 0,
+    enabled INTEGER DEFAULT 1,
+    last_run_at TIMESTAMP,
+    notes TEXT
+);
 """
+
+_MIGRATIONS = [
+    "ALTER TABLE applications ADD COLUMN opportunity_type TEXT DEFAULT 'job'",
+    "ALTER TABLE applications ADD COLUMN deadline TIMESTAMP",
+    "ALTER TABLE applications ADD COLUMN source TEXT",
+]
 
 
 def _now_utc_iso() -> str:
@@ -87,11 +124,23 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def bootstrap(db_path: Path) -> sqlite3.Connection:
-    """Crée le schéma si absent, renvoie une connexion prête à l'emploi."""
+    """Crée le schéma si absent, applique les migrations additives, renvoie la connexion."""
     conn = connect(db_path)
     conn.executescript(SCHEMA)
+    _apply_migrations(conn)
     log.debug("DB bootstrap OK at %s", db_path)
     return conn
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    """Applique les ALTER TABLE additifs en ignorant ceux déjà appliqués."""
+    for stmt in _MIGRATIONS:
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" in str(exc).lower():
+                continue
+            raise
 
 
 @contextmanager
@@ -280,6 +329,180 @@ def record_inbox_event(
             sender,
             event_type.value,
             raw_snippet[:1000],
+        ),
+    )
+    return int(cur.lastrowid or 0)
+
+
+# ---------------------------------------------------------------------------
+# Helpers pour les nouvelles tables (site_credentials, auth_events, watch_sources)
+# ---------------------------------------------------------------------------
+
+
+def upsert_site_credential(
+    conn: sqlite3.Connection,
+    *,
+    site_domain: str,
+    auth_method: str,
+    username: str | None,
+    password_encrypted: bytes | None,
+    notes: str = "",
+) -> None:
+    now = _now_utc_iso()
+    conn.execute(
+        """
+        INSERT INTO site_credentials
+            (site_domain, auth_method, username, password_encrypted, notes,
+             created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(site_domain) DO UPDATE SET
+            auth_method = excluded.auth_method,
+            username = excluded.username,
+            password_encrypted = excluded.password_encrypted,
+            notes = excluded.notes,
+            updated_at = excluded.updated_at
+        """,
+        (site_domain, auth_method, username, password_encrypted, notes, now, now),
+    )
+
+
+def get_site_credential(conn: sqlite3.Connection, site_domain: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM site_credentials WHERE site_domain = ?", (site_domain,)
+    ).fetchone()
+
+
+def list_site_credentials(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return list(
+        conn.execute("SELECT * FROM site_credentials ORDER BY site_domain")
+    )
+
+
+def delete_site_credential(conn: sqlite3.Connection, site_domain: str) -> int:
+    cur = conn.execute(
+        "DELETE FROM site_credentials WHERE site_domain = ?", (site_domain,)
+    )
+    return cur.rowcount
+
+
+def record_auth_event(
+    conn: sqlite3.Connection,
+    *,
+    site_domain: str,
+    event_type: str,
+    success: bool,
+    notes: str = "",
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO auth_events (site_domain, event_type, success, occurred_at, notes)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (site_domain, event_type, 1 if success else 0, _now_utc_iso(), notes),
+    )
+
+
+def upsert_watch_source(
+    conn: sqlite3.Connection,
+    *,
+    name: str,
+    url: str,
+    method: str,
+    opportunity_type: str = "job",
+    refresh_hours: int = 24,
+    free_funded_only: bool = False,
+    enabled: bool = True,
+    notes: str = "",
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO watch_sources
+            (name, url, method, opportunity_type, refresh_hours,
+             free_funded_only, enabled, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET
+            url = excluded.url,
+            method = excluded.method,
+            opportunity_type = excluded.opportunity_type,
+            refresh_hours = excluded.refresh_hours,
+            free_funded_only = excluded.free_funded_only,
+            enabled = excluded.enabled,
+            notes = excluded.notes
+        """,
+        (
+            name,
+            url,
+            method,
+            opportunity_type,
+            int(refresh_hours),
+            1 if free_funded_only else 0,
+            1 if enabled else 0,
+            notes,
+        ),
+    )
+
+
+def get_watch_source(conn: sqlite3.Connection, name: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM watch_sources WHERE name = ?", (name,)).fetchone()
+
+
+def list_watch_sources(conn: sqlite3.Connection, only_enabled: bool = False) -> list[sqlite3.Row]:
+    sql = "SELECT * FROM watch_sources"
+    if only_enabled:
+        sql += " WHERE enabled = 1"
+    sql += " ORDER BY name"
+    return list(conn.execute(sql))
+
+
+def set_watch_source_enabled(
+    conn: sqlite3.Connection, name: str, enabled: bool
+) -> int:
+    cur = conn.execute(
+        "UPDATE watch_sources SET enabled = ? WHERE name = ?",
+        (1 if enabled else 0, name),
+    )
+    return cur.rowcount
+
+
+def delete_watch_source(conn: sqlite3.Connection, name: str) -> int:
+    cur = conn.execute("DELETE FROM watch_sources WHERE name = ?", (name,))
+    return cur.rowcount
+
+
+def mark_watch_source_run(conn: sqlite3.Connection, name: str) -> None:
+    conn.execute(
+        "UPDATE watch_sources SET last_run_at = ? WHERE name = ?",
+        (_now_utc_iso(), name),
+    )
+
+
+def insert_opportunity_application(
+    conn: sqlite3.Connection,
+    *,
+    company: str,
+    job_title: str,
+    job_url: str,
+    job_description: str | None,
+    opportunity_type: str,
+    deadline: datetime | None,
+    source: str,
+) -> int:
+    """Insert d'une opportunité (job/contest/event/cfp) dans applications."""
+    cur = conn.execute(
+        """
+        INSERT INTO applications
+            (company, job_title, job_url, job_description, status,
+             opportunity_type, deadline, source)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+        """,
+        (
+            company,
+            job_title,
+            job_url,
+            job_description,
+            opportunity_type,
+            deadline.astimezone(UTC).replace(microsecond=0).isoformat() if deadline else None,
+            source,
         ),
     )
     return int(cur.lastrowid or 0)

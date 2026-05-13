@@ -15,6 +15,7 @@ from rich.table import Table
 
 from . import db, llm
 from .agent import Agent, load_profile
+from .auth_manager import AuthManager, Vault, root_domain, shared_chrome_profile_dir
 from .config import (
     DEFAULT_INBOX_HOURS,
     DEFAULT_RATE_PER_HOUR,
@@ -25,8 +26,15 @@ from .config import (
 )
 from .email_pool import EmailPool
 from .imap_reader import can_connect
+from .job_finder import JobFinder, build_query_from_profile, import_watch_list_from_json
 from .logging_setup import setup
-from .models import ApplicationStatus, EmailStatus
+from .models import (
+    ApplicationStatus,
+    AuthMethod,
+    EmailStatus,
+    OpportunityType,
+    WatchSourceMethod,
+)
 
 app = typer.Typer(
     name="job-agent",
@@ -250,6 +258,319 @@ def doctor(
         )
         raise typer.Exit(1)
     console.print("[bold green]All checks passed.[/bold green]")
+
+
+# ---------------------------------------------------------------------------
+# search : recherche multi-source
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def search(
+    keywords: Annotated[
+        str | None, typer.Option("--keywords", help="Mots-clés (sépare par virgules). Sinon, profil.")
+    ] = None,
+    location: Annotated[str | None, typer.Option("--location")] = None,
+    types: Annotated[
+        str | None,
+        typer.Option("--types", help="Filtre par types (csv): job,contest,event,cfp"),
+    ] = None,
+    max_per_source: Annotated[int, typer.Option("--max", help="Max par source")] = 50,
+    days: Annotated[int, typer.Option("--days", help="Postées dans les N derniers jours")] = 14,
+    free_only: Annotated[bool, typer.Option("--free-only", help="Filtre opportunités gratuites")] = False,
+    min_funding: Annotated[int, typer.Option("--min-funding", help="Dotation minimum EUR")] = 0,
+    no_apis: Annotated[bool, typer.Option("--no-apis", help="Exclut Adzuna/France Travail")] = False,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Lance la recherche d'opportunités sur toutes les sources actives."""
+    cfg, conn = _bootstrap(verbose)
+    profile = load_profile(cfg.profile_path) if cfg.profile_path.exists() else None
+
+    kw_list = [k.strip() for k in keywords.split(",")] if keywords else None
+    types_list: list[OpportunityType] | None = None
+    if types:
+        types_list = [OpportunityType(t.strip()) for t in types.split(",") if t.strip()]
+
+    query = build_query_from_profile(
+        keywords_override=kw_list,
+        location_override=location,
+        opportunity_types=types_list,
+        max_results=max_per_source,
+        days=days,
+        free_only=free_only,
+        min_funding_eur=min_funding,
+        profile_target_roles=profile.target_roles if profile else None,
+        profile_skills=profile.skills if profile else None,
+        profile_city=profile.city if profile else None,
+    )
+
+    if not query.keywords and not location:
+        console.print(
+            "[yellow]Aucun keyword et pas de profil : la recherche risque d'être pauvre.[/yellow]"
+        )
+
+    console.print(f"[cyan]Recherche : keywords={query.keywords} location={query.location}[/cyan]")
+    finder = JobFinder(conn)
+    stats = finder.search(query, include_apis=not no_apis)
+
+    table = Table(title="Résultats par source")
+    table.add_column("source")
+    table.add_column("retrouvé", justify="right")
+    for name, n in stats.items():
+        if name == "_inserted_total":
+            continue
+        label = "[red]erreur[/red]" if n < 0 else str(n)
+        table.add_row(name, label)
+    console.print(table)
+    inserted = stats.get("_inserted_total", 0)
+    console.print(f"[green]{inserted} nouvelle(s) opportunité(s) ajoutée(s) en pending.[/green]")
+
+
+# ---------------------------------------------------------------------------
+# watch : gestion des sources veillées
+# ---------------------------------------------------------------------------
+
+watch_app = typer.Typer(help="Gère les sources d'opportunités à veiller.", no_args_is_help=True)
+app.add_typer(watch_app, name="watch")
+
+
+@watch_app.command("add")
+def watch_add(
+    url: Annotated[str, typer.Argument(help="URL de la page / flux")],
+    name: Annotated[str | None, typer.Option("--name")] = None,
+    method: Annotated[
+        WatchSourceMethod, typer.Option("--method", help="rss|html_scrape|browser_use")
+    ] = WatchSourceMethod.HTML_SCRAPE,
+    type_: Annotated[
+        OpportunityType,
+        typer.Option("--type", help="job|contest|event|cfp"),
+    ] = OpportunityType.JOB,
+    every: Annotated[int, typer.Option("--every", help="Refresh toutes les N heures")] = 24,
+    free_only: Annotated[bool, typer.Option("--free-only")] = False,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Ajoute une source à veiller (RSS, HTML, ou browser-use)."""
+    _, conn = _bootstrap(verbose)
+    derived_name = name or root_domain(url) or url
+    with db.transaction(conn):
+        db.upsert_watch_source(
+            conn,
+            name=derived_name,
+            url=url,
+            method=method.value,
+            opportunity_type=type_.value,
+            refresh_hours=every,
+            free_funded_only=free_only,
+            enabled=True,
+        )
+    console.print(f"[green]Source ajoutée :[/green] {derived_name} ({method.value})")
+
+
+@watch_app.command("list")
+def watch_list_cmd(
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Liste les sources veillées."""
+    _, conn = _bootstrap(verbose)
+    rows = db.list_watch_sources(conn)
+    if not rows:
+        console.print("[yellow]Aucune source. Ajoute avec : job-agent watch add <url>[/yellow]")
+        return
+    table = Table(title="Sources veillées")
+    table.add_column("name")
+    table.add_column("method")
+    table.add_column("type")
+    table.add_column("free?")
+    table.add_column("every")
+    table.add_column("enabled")
+    table.add_column("last_run")
+    for r in rows:
+        table.add_row(
+            r["name"],
+            r["method"],
+            r["opportunity_type"],
+            "✓" if r["free_funded_only"] else "",
+            f"{r['refresh_hours']}h",
+            "[green]on[/green]" if r["enabled"] else "[red]off[/red]",
+            _format_local(r["last_run_at"]),
+        )
+    console.print(table)
+
+
+@watch_app.command("enable")
+def watch_enable(
+    name: Annotated[str, typer.Argument()],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    _, conn = _bootstrap(verbose)
+    with db.transaction(conn):
+        n = db.set_watch_source_enabled(conn, name, True)
+    console.print(f"[green]Enabled[/green] {n} source(s).")
+
+
+@watch_app.command("disable")
+def watch_disable(
+    name: Annotated[str, typer.Argument()],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    _, conn = _bootstrap(verbose)
+    with db.transaction(conn):
+        n = db.set_watch_source_enabled(conn, name, False)
+    console.print(f"[yellow]Disabled[/yellow] {n} source(s).")
+
+
+@watch_app.command("remove")
+def watch_remove(
+    name: Annotated[str, typer.Argument()],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    _, conn = _bootstrap(verbose)
+    with db.transaction(conn):
+        n = db.delete_watch_source(conn, name)
+    console.print(f"[yellow]Removed[/yellow] {n} source(s).")
+
+
+@watch_app.command("import")
+def watch_import(
+    path: Annotated[Path, typer.Argument(help="Chemin vers watch_sources.json")],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Importe (upsert) un fichier JSON de sources veillées."""
+    _, conn = _bootstrap(verbose)
+    n = import_watch_list_from_json(conn, path)
+    console.print(f"[green]Imported {n} watch sources from {path}[/green]")
+
+
+# ---------------------------------------------------------------------------
+# vault : credentials chiffrés pour les sites
+# ---------------------------------------------------------------------------
+
+vault_app = typer.Typer(help="Gère le vault de credentials (Fernet).", no_args_is_help=True)
+app.add_typer(vault_app, name="vault")
+
+
+@vault_app.command("add")
+def vault_add(
+    domain: Annotated[str, typer.Argument(help="ex: greenhouse.io")],
+    username: Annotated[str, typer.Option("--username", prompt=True)],
+    password: Annotated[
+        str, typer.Option("--password", prompt=True, hide_input=True, confirmation_prompt=False)
+    ],
+    auth: Annotated[
+        AuthMethod, typer.Option("--auth", help="stored|shared_chrome")
+    ] = AuthMethod.STORED,
+    notes: Annotated[str, typer.Option("--notes")] = "",
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Ajoute/maj un credential chiffré pour un domaine."""
+    _, conn = _bootstrap(verbose)
+    vault = Vault.from_env_or_prompt()
+    am = AuthManager(conn, vault)
+    am.add_credential(
+        site_domain=domain,
+        username=username,
+        password=password,
+        auth_method=auth,
+        notes=notes,
+    )
+    console.print(f"[green]Stored credential for {domain}.[/green]")
+
+
+@vault_app.command("list")
+def vault_list(
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Liste les domaines avec credentials (sans révéler les mots de passe)."""
+    _, conn = _bootstrap(verbose)
+    rows = db.list_site_credentials(conn)
+    if not rows:
+        console.print("[yellow]Aucun credential.[/yellow]")
+        return
+    table = Table(title="Credentials")
+    table.add_column("domain")
+    table.add_column("auth")
+    table.add_column("username")
+    table.add_column("has_password")
+    for r in rows:
+        table.add_row(
+            r["site_domain"],
+            r["auth_method"],
+            r["username"] or "-",
+            "✓" if r["password_encrypted"] else "",
+        )
+    console.print(table)
+
+
+@vault_app.command("remove")
+def vault_remove(
+    domain: Annotated[str, typer.Argument()],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    _, conn = _bootstrap(verbose)
+    with db.transaction(conn):
+        n = db.delete_site_credential(conn, domain)
+    console.print(f"[yellow]Removed[/yellow] {n} credential(s).")
+
+
+# ---------------------------------------------------------------------------
+# login : ouvre Chrome shared profile pour se logger manuellement
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def login(
+    domain: Annotated[str, typer.Argument(help="Domaine, ex: linkedin.com")],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Lance Chrome (profil partagé) pour que tu te connectes manuellement.
+
+    Ta session est sauvegardée dans data/.browser_profile/ et réutilisée
+    automatiquement par les soumissions ultérieures.
+    """
+    cfg, conn = _bootstrap(verbose)
+    profile_dir = shared_chrome_profile_dir(cfg.project_root)
+    console.print(
+        Panel.fit(
+            f"Chrome va s'ouvrir sur https://{domain}\n\n"
+            f"Profil partagé : {profile_dir}\n\n"
+            "Connecte-toi normalement, navigue, vérifie que c'est OK.\n"
+            "Quand c'est bon, ferme la fenêtre — la session sera sauvegardée.",
+            title="Login manuel",
+            border_style="cyan",
+        )
+    )
+    import asyncio
+
+    asyncio.run(_open_login_browser(domain, profile_dir))
+    with db.transaction(conn):
+        db.record_auth_event(
+            conn,
+            site_domain=domain,
+            event_type="session_capture",
+            success=True,
+            notes=f"profile_dir={profile_dir}",
+        )
+    console.print("[green]Session capturée.[/green]")
+
+
+async def _open_login_browser(domain: str, profile_dir: Path) -> None:
+    import contextlib
+
+    from patchright.async_api import async_playwright
+
+    async with async_playwright() as pw:
+        ctx = await pw.chromium.launch_persistent_context(
+            user_data_dir=str(profile_dir),
+            headless=False,
+            locale="fr-FR",
+        )
+        try:
+            page = await ctx.new_page()
+            await page.goto(f"https://{domain}", wait_until="domcontentloaded", timeout=60000)
+            with contextlib.suppress(Exception):
+                await page.wait_for_event("close", timeout=600000)
+        finally:
+            await ctx.close()
 
 
 def _color_for_status(s: str) -> str:

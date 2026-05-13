@@ -1,0 +1,17 @@
+Tu classes une page web dans l'une de ces 4 catégories :
+- job : offre d'emploi (CDI, CDD, stage, freelance...).
+- contest : concours, hackathon, prix d'innovation, challenge.
+- event : conférence, sommet, forum, meetup, workshop.
+- cfp : appel à projets, appel d'offres, demande de financement (grant), appel à communications.
+
+Titre : {{title}}
+Organisation : {{organization}}
+Description :
+{{description}}
+
+Consigne :
+1. Choisis la catégorie qui correspond le mieux au contenu.
+2. Si une deadline (date limite) est mentionnée, extrait-la au format ISO 8601 (YYYY-MM-DDTHH:MM:SS+00:00). Sinon None.
+3. Donne une confidence entre 0.0 et 1.0.
+
+Réponds UNIQUEMENT via l'outil `detect_opportunity_type`.

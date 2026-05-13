@@ -1,0 +1,16 @@
+Tu extrais les conditions financières d'une opportunité (concours, prix, appel à projets, formation, hackathon...).
+
+Titre : {{title}}
+Description :
+{{description}}
+
+Consigne :
+- is_free_to_enter : True si la participation/candidature est gratuite (pas de frais d'inscription, pas d'achat de billet obligatoire).
+- is_funded : True si l'opportunité comporte une dotation, un prix en argent, une bourse, ou un financement à la clé.
+- funding_amount_eur : montant total en EUR si trouvé (somme des prix/dotations). None sinon.
+- funding_type : "prize" (concours, dotation), "grant" (subvention, appel à projets financé), "scholarship" (bourse étudiante/recherche), "salary" (rémunération pour un job/CDI), "none" (aucun financement).
+- notes : 1 phrase courte si une information importante manque ou nécessite vérification humaine.
+
+Si les informations sont absentes, marque is_free_to_enter=False et is_funded=False par prudence.
+
+Réponds UNIQUEMENT via l'outil `extract_funding`.

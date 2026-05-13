@@ -168,6 +168,13 @@ Place ton CV PDF de base à `data/cv_base.pdf` (ou ajuste `cv_path` dans `profil
 | `uv run job-agent run [--max N] [--threshold 60] [--rate 5] [--headless]` | Traite toutes les offres `pending`, en respectant le rate. |
 | `uv run job-agent status [--last 20]` | Affiche un tableau coloré des dernières candidatures. |
 | `uv run job-agent inbox [--hours 24]` | Check IMAP sur toutes les boîtes, classifie, met à jour la DB. |
+| `uv run job-agent search` | Recherche des opportunités sur toutes les sources actives. |
+| `uv run job-agent watch add <url>` | Ajoute une source à veiller (RSS / HTML / browser-use). |
+| `uv run job-agent watch list` | Liste les sources veillées. |
+| `uv run job-agent watch import <file>` | Import en masse depuis un JSON. |
+| `uv run job-agent vault add <domain>` | Stocke username/password chiffré (Fernet) pour un site. |
+| `uv run job-agent vault list` | Liste les domaines avec credentials (mots de passe masqués). |
+| `uv run job-agent login <domain>` | Ouvre Chrome (profil partagé) pour login manuel. |
 
 ### Exemples
 
@@ -189,7 +196,66 @@ uv run job-agent status --last 30
 
 # Faire un check des mails reçus dans les 48 dernières heures
 uv run job-agent inbox --hours 48
+
+# === Recherche d'opportunités ===
+
+# Importer le template de sources à veiller
+cp data/watch_sources.example.json data/watch_sources.json   # macOS/Linux
+copy data\watch_sources.example.json data\watch_sources.json # Windows
+# (édite-le pour activer enabled=true sur les sources que tu veux)
+uv run job-agent watch import data/watch_sources.json
+
+# Ajouter une source à veiller à la volée
+uv run job-agent watch add "https://devpost.com/hackathons" \
+    --name Devpost --method browser_use --type contest --free-only
+
+# Lister les sources veillées
+uv run job-agent watch list
+
+# Lancer la recherche (utilise target_roles et city du profil par défaut)
+uv run job-agent search --days 14
+
+# Recherche filtrée : seulement gratuites + dotation min 5000 €
+uv run job-agent search --free-only --min-funding 5000
+
+# Recherche ciblée
+uv run job-agent search --keywords "Python,FastAPI,IA" --location Paris \
+    --types job,contest,cfp
+
+# === Authentification (sites avec login) ===
+
+# Logger Chrome partagé sur un site (LinkedIn, Indeed, etc.)
+uv run job-agent login linkedin.com
+# (Une fenêtre s'ouvre, tu te connectes manuellement, tu fermes : session sauvegardée)
+
+# Stocker un compte ATS chiffré (Greenhouse, Lever, etc.)
+uv run job-agent vault add greenhouse.io
+# (Te demande username + password en interactif. Master password vault si pas dans .env.)
+
+# Lister les credentials stockés (mots de passe jamais affichés)
+uv run job-agent vault list
 ```
+
+### Recherche d'opportunités — 5 sources supportées
+
+| Méthode | Cas d'usage | Activation |
+|---|---|---|
+| **API Adzuna** | Offres d'emploi (FR + monde) | Renseigne `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` dans `.env` |
+| **API France Travail** | Offres FR (ex-Pôle Emploi) | Renseigne `FRANCE_TRAVAIL_CLIENT_ID` + `FRANCE_TRAVAIL_CLIENT_SECRET` |
+| **RSS** | Flux RSS / Atom (sites événementiels, newsletters) | `watch add <url> --method rss` |
+| **HTML scrape** | Pages careers d'entreprises, listings statiques (Bpifrance, etc.) | `watch add <url> --method html_scrape` |
+| **browser-use** | Sites JS lourds (Devpost, F6S, WTTJ) | `watch add <url> --method browser_use` |
+
+Les sources sont **désactivées par défaut**. Tu actives celles que tu veux via `watch enable <name>` ou dans le JSON.
+
+Le scoring se base sur ton `profile.json` (`target_roles`, `skills`, `city`, `preferences`). Le LLM **détecte automatiquement** le type d'opportunité (`job` / `contest` / `event` / `cfp`) pour les sources génériques (RSS, HTML, browser-use). Le filtre `--free-only` extrait via LLM les conditions financières (gratuité, dotation, type) et écarte les opportunités payantes.
+
+### Login / inscription — politique
+
+- **Sites ATS** (Greenhouse, Lever, Workable, SmartRecruiters, Ashby, Workday) : login et inscription auto autorisés (`vault add <domain>`).
+- **LinkedIn, Indeed, et autres job boards** : **pas d'inscription auto** (violation CGU). Utilise `job-agent login <domain>` pour te connecter manuellement une fois, la session est ensuite réutilisée.
+- **Stockage** : credentials chiffrés via **Fernet** (cryptography). Master password lu depuis `JOB_AGENT_VAULT_KEY` (`.env`) ou demandé interactivement via `getpass`.
+- **Aucun mot de passe** n'apparaît dans les logs, la DB en clair, ou la console.
 
 ---
 
