@@ -1,0 +1,14 @@
+Tu classes un email reçu après une candidature dans l'une de ces 4 catégories :
+- confirmation : l'email confirme la bonne réception de la candidature (avec ou sans lien à cliquer).
+- rejection : refus explicite ou poli ("nous avons retenu d'autres profils", etc.).
+- interview_invite : invitation à un entretien, un test, ou un échange.
+- other : tout le reste (newsletters, accusés techniques, spam, etc.).
+
+Sujet : {{subject}}
+
+Corps (extrait) :
+{{body}}
+
+Réponds UNIQUEMENT via l'outil `classify_email` avec :
+- type : un des 4 labels ci-dessus.
+- confidence : 0.0 à 1.0.

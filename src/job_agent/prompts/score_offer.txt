@@ -1,0 +1,27 @@
+Tu évalues l'adéquation d'une offre d'emploi avec le profil d'un candidat.
+
+Profil du candidat (JSON) :
+{{profile_json}}
+
+Texte du CV de base (extrait, peut être tronqué) :
+{{cv_text}}
+
+Offre d'emploi :
+Titre : {{job_title}}
+Entreprise : {{company}}
+URL : {{job_url}}
+Description :
+{{job_description}}
+
+Consigne :
+1. Détecte la langue de l'offre (renvoie "fr", "en", "es", etc.).
+2. Attribue un score entier de 0 à 100 selon cette pondération :
+   - 40 points : adéquation des compétences (skills) avec celles attendues.
+   - 20 points : niveau d'expérience cohérent avec le poste.
+   - 20 points : respect des préférences (remote, salaire min, type de contrat, industries exclues).
+   - 20 points : alignement avec les target_roles ; si target_roles est vide, baser ce volet sur current_title + skills.
+3. Justifie le score en 2-3 phrases factuelles (cite les éléments concrets).
+
+Pénalise fortement (max 30) si l'offre appartient à une industrie exclue par le candidat.
+
+Réponds UNIQUEMENT via l'outil `score_offer`.

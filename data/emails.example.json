@@ -1,0 +1,20 @@
+[
+  {
+    "address": "exemple1@gmail.com",
+    "app_password": "xxxx xxxx xxxx xxxx",
+    "imap_host": "imap.gmail.com",
+    "imap_port": 993,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "display_name": "Prénom Nom"
+  },
+  {
+    "address": "exemple2@gmail.com",
+    "app_password": "yyyy yyyy yyyy yyyy",
+    "imap_host": "imap.gmail.com",
+    "imap_port": 993,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "display_name": "Prénom Nom"
+  }
+]

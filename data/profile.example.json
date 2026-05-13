@@ -1,0 +1,38 @@
+{
+  "first_name": "Prénom",
+  "last_name": "Nom",
+  "phone": "+33600000000",
+  "city": "Paris",
+  "country": "France",
+  "linkedin": "https://www.linkedin.com/in/votre-handle",
+  "github": "https://github.com/votre-handle",
+  "portfolio": "https://votre-site.com",
+  "years_experience": 5,
+  "current_title": "Backend Engineer",
+  "target_roles": [
+    "Backend Engineer",
+    "Platform Engineer",
+    "Software Engineer"
+  ],
+  "skills": [
+    "Python",
+    "FastAPI",
+    "PostgreSQL",
+    "Docker",
+    "AWS",
+    "Git",
+    "SQL"
+  ],
+  "languages": [
+    { "name": "French", "level": "native" },
+    { "name": "English", "level": "fluent" }
+  ],
+  "preferences": {
+    "remote": "hybrid",
+    "salary_min_eur": 50000,
+    "contract_types": ["CDI", "CDD"],
+    "excluded_industries": ["tobacco", "gambling"]
+  },
+  "cv_path": "data/cv_base.pdf",
+  "bio_short": "Backend engineer avec 5 ans d'XP, spécialisé en services Python à fort trafic."
+}

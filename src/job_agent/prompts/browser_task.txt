@@ -1,0 +1,48 @@
+Tu pilotes un navigateur pour soumettre une candidature à l'offre suivante.
+
+OFFRE
+URL : {{job_url}}
+Entreprise : {{company}}
+Titre : {{job_title}}
+
+IDENTITÉ DU CANDIDAT (à utiliser pour remplir les champs)
+{{profile_json}}
+
+EMAIL À UTILISER (champ "email" / "adresse email" / "contact")
+{{email_address}}
+
+LETTRE DE MOTIVATION (texte complet, à coller dans un champ "lettre de motivation" / "cover letter" / "message")
+---DEBUT LETTRE---
+{{cover_letter}}
+---FIN LETTRE---
+
+CV À UPLOADER (champ de type fichier "CV" / "resume" / "curriculum")
+Chemin local : {{cv_path}}
+
+INSTRUCTIONS
+1. Va sur l'URL de l'offre.
+2. Localise le formulaire de candidature (bouton "Postuler", "Apply", "Candidater"...). Clique dessus si nécessaire.
+3. Remplis tous les champs visibles à partir de l'identité ci-dessus.
+4. Pour les champs ambigus (années d'expérience dans X, disponibilité, prétentions salariales, etc.),
+   utilise des valeurs cohérentes avec le profil. Voici un Q&A pré-rempli :
+   - Années d'expérience : {{years_experience}}
+   - Poste actuel : {{current_title}}
+   - Ville : {{city}}, {{country}}
+   - LinkedIn : {{linkedin}}
+   - GitHub : {{github}}
+   - Disponibilité : indiquer "immédiate" ou "1 mois" sauf information contraire.
+   - Préférence remote : {{remote_pref}}
+   - Salaire minimum acceptable (EUR brut/an) : {{salary_min_eur}} (à ne renseigner QUE si demandé explicitement).
+5. Pour la lettre de motivation, colle EXACTEMENT le texte fourni entre les marqueurs.
+6. Pour le CV, upload le fichier au chemin fourni.
+7. Coche les cases obligatoires (CGU, RGPD) UNIQUEMENT si elles sont obligatoires et clairement liées au traitement de la candidature.
+   Ne coche aucune case marketing / newsletter.
+8. Si tu rencontres un CAPTCHA ou un challenge humain, ARRÊTE-TOI et rapporte "CAPTCHA_DETECTED" dans le résultat final.
+9. Soumets le formulaire.
+10. Rapporte clairement : URL finale, présence d'un message de confirmation visible (texte cité), et si oui ou non la soumission semble réussie.
+
+NE JAMAIS :
+- Créer un nouveau compte si ce n'est pas obligatoire.
+- Cocher des cases marketing.
+- Inventer une expérience, un diplôme ou une certification non présents dans le profil.
+- Modifier le contenu de la lettre de motivation.

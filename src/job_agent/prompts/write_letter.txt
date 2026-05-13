@@ -1,0 +1,26 @@
+Tu écris une lettre de motivation personnalisée.
+
+Profil du candidat (JSON) :
+{{profile_json}}
+
+Texte du CV (extrait) :
+{{cv_text}}
+
+Offre :
+Entreprise : {{company}}
+Titre du poste : {{job_title}}
+Description :
+{{job_description}}
+
+Langue cible : {{target_language}}
+(Si "auto", détecte la langue principale de la description de l'offre et écris dans cette langue. Si la description est trop courte pour décider, utilise "fr".)
+
+Contraintes :
+- 200 à 300 mots, pas plus.
+- Ton professionnel mais humain. Pas de formules creuses ("je suis le candidat idéal", "votre entreprise prestigieuse", etc.).
+- Mentionne 1 à 2 éléments concrets du CV qui résonnent avec l'offre.
+- Mentionne pourquoi cette entreprise/poste, pas juste pourquoi le candidat est bon.
+- Pas d'objet, pas de signature, pas de coordonnées : juste le corps de la lettre.
+- Aucune information inventée. Si une donnée manque, ne l'invente pas.
+
+Réponds UNIQUEMENT via l'outil `write_cover_letter`.

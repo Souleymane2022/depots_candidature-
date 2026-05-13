@@ -1,0 +1,41 @@
+# Secrets
+.env
+
+# Données utilisateur (jamais en clair dans le repo)
+data/*.json
+!data/*.example.json
+data/*.pdf
+data/agent.db
+data/agent.db-journal
+data/.cache/
+data/generated/
+data/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Environnements
+.venv/
+venv/
+.python-version
+
+# Tests
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Outils
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
